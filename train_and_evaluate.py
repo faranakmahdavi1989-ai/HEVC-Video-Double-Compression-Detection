@@ -46,12 +46,12 @@ if gpus:
 # ========================================
 batch_size  = 16
 epochs      = 100
-warmup_ep   = 5                 # freeze base during first few epochs
+warmup_ep   = 5                 
 num_classes = 2
 input_shape = (224, 224, 3)
 AUTOTUNE    = tf.data.AUTOTUNE
 split_rate  = 0.9
-weight_decay = 1e-4             # L2 for Dense/attention layers
+weight_decay = 1e-4             
 dropout_rate = 0.6            
 gaussian_noise = 0.05
 # ========================================
@@ -114,11 +114,11 @@ def get_file_paths(base_dir):
     return file_paths, labels
 
 def decode_img(img_path):
-    # return float32 [0,255]; we'll preprocess/augment inside the model
+    
     img = tf.io.read_file(img_path)
     img = tf.image.decode_png(img, channels=3)
     img = tf.image.resize(img, [224, 224])
-    img = preprocess_input(img)   # normalize to NASNetMobile expected range
+    img = preprocess_input(img)  
     return img
 
 def load_multiple_inputs(ctu_path, tu_path, dir_path, otu_path, IF_path, label):
@@ -197,7 +197,7 @@ class AdvancedTestEvaluationCallback(tf.keras.callbacks.Callback):
                 self.plot_performance_over_time()
                 
               
-                if len(self.results) == 1:  # فقط برای اولین بار
+                if len(self.results) == 1:  
                     self.save_sample_predictions(best_model)
             else:
                 print(f"⚠️ Warning: Best model file not found at {best_model_path}")
@@ -337,12 +337,12 @@ class AdvancedTestEvaluationCallback(tf.keras.callbacks.Callback):
                 f.write(f"{s['sample_id']:<5} {s['true_label']:<12} {s['pred_label']:<12} "
                        f"{s['confidence']:.4f}{' '*(8-len(str(s['confidence'])))} {status:<8}\n")
         
-        print(f"   📝 Sample predictions saved to: {sample_file}")
+        print(f"   Sample predictions saved to: {sample_file}")
     
     def on_train_end(self, logs=None):
        
         print(f"\n{'='*80}")
-        print("🏁 TRAINING COMPLETED - FINAL TEST EVALUATION SUMMARY")
+        print(" TRAINING COMPLETED - FINAL TEST EVALUATION SUMMARY")
         print(f"{'='*80}")
         print(f"Best model found at epoch {self.best_epoch+1}")
         print(f"Best validation accuracy: {self.best_val_acc:.4f} ({self.best_val_acc*100:.2f}%)")
@@ -350,7 +350,7 @@ class AdvancedTestEvaluationCallback(tf.keras.callbacks.Callback):
         if self.results:
            
             best_result = max(self.results, key=lambda x: x['test_accuracy'])
-            print(f"\n📊 BEST TEST PERFORMANCE:")
+            print(f"\n BEST TEST PERFORMANCE:")
             print(f"   Epoch: {best_result['epoch']}")
             print(f"   Test Accuracy: {best_result['test_accuracy']:.4f} ({best_result['test_accuracy']*100:.2f}%)")
             print(f"   Precision: {best_result['precision']:.4f}")
@@ -409,17 +409,17 @@ Test_zipped = list(zip(Test_ctu_files, Test_tu_files, Test_dir_files, Test_otu_f
 random.shuffle(Test_zipped)
 Test_ctu_files, Test_tu_files, Test_dir_files, Test_otu_files, Test_IF_files, Test_labels = zip(*Test_zipped)
 
-# Use the FULL test set (no split)
+
 Test_dataset = build_dataset(Test_ctu_files, Test_tu_files, Test_dir_files, Test_otu_files, Test_IF_files, Test_labels, shuffle=False)
 
 # ========================================
 # Attention blocks (with L2)
 # ========================================
 def cbam_block(input_tensor, ratio=8, name="cbam"):
-    """CBAM: Channel + Spatial Attention"""
+
     channel = input_tensor.shape[-1]
 
-    # ---- Channel Attention ----
+
     avg_pool = GlobalAveragePooling2D()(input_tensor)
     max_pool = tf.reduce_max(input_tensor, axis=[1, 2])
 
@@ -432,7 +432,7 @@ def cbam_block(input_tensor, ratio=8, name="cbam"):
     channel_att = Reshape((1, 1, channel))(channel_att)
     x = Multiply(name=f"{name}_channel")([input_tensor, channel_att])
 
-    # ---- Spatial Attention ----
+
     avg_pool = tf.reduce_mean(x, axis=-1, keepdims=True)
     max_pool = tf.reduce_max(x, axis=-1, keepdims=True)
     concat = Concatenate(axis=-1)([avg_pool, max_pool])
@@ -451,12 +451,12 @@ def cross_attention(query_feat, key_value_feat, name="cross_attention"):
     k = tf.reshape(key_value_feat, [tf.shape(key_value_feat)[0], -1, key_value_feat.shape[-1]])
     v = tf.reshape(key_value_feat, [tf.shape(key_value_feat)[0], -1, key_value_feat.shape[-1]])
     
-    # Add layer normalization before attention
+
     q = LayerNormalization(name=f"{name}_q_ln")(q)
     k = LayerNormalization(name=f"{name}_k_ln")(k)
     v = LayerNormalization(name=f"{name}_v_ln")(v)
     
-    # Multi-head attention with dropout
+
     attn_out = MultiHeadAttention(
         num_heads=8,  # Increased heads
         key_dim=query_feat.shape[-1]//8, 
@@ -464,11 +464,11 @@ def cross_attention(query_feat, key_value_feat, name="cross_attention"):
         name=name
     )(q, k, v)
     
-    # Restore spatial dimensions
+
     h, w = query_feat.shape[1], query_feat.shape[2]
     attn_out = tf.reshape(attn_out, [tf.shape(query_feat)[0], h, w, query_feat.shape[-1]])
     
-    # Residual connection + normalization with gate
+
     residual = Add(name=f"{name}_residual")([query_feat, attn_out])
     output = LayerNormalization(name=f"{name}_ln")(residual)
     
@@ -479,8 +479,7 @@ def cross_attention(query_feat, key_value_feat, name="cross_attention"):
 # Model
 # ========================================
 def build_model(input_shape=(224,224,3), num_classes=2, augment=True):
-    # Shared augmentation (light, to avoid destroying subtle forensics cues)
-    # Inputs
+
     ctu_in = Input(input_shape, name='ctu_input')
     tu_in  = Input(input_shape, name='tu_input')
     dir_in = Input(input_shape, name='dir_input')
@@ -505,7 +504,7 @@ def build_model(input_shape=(224,224,3), num_classes=2, augment=True):
       
 
     
-    # Cross-attention chain
+
     IF_feat = feat_IF
 
     
@@ -522,7 +521,7 @@ def build_model(input_shape=(224,224,3), num_classes=2, augment=True):
 
     
 
-    # Global pooling + dropout for each branch
+
     def pool(x, name):
         return Dropout(0.2, name=f'{name}_do')(GlobalAveragePooling2D(name=name)(x))
 
@@ -532,16 +531,16 @@ def build_model(input_shape=(224,224,3), num_classes=2, augment=True):
 
     merged = Concatenate(name='concat')([p_ctu, p_tu, p_dir, p_otu, p_IF])
 
-    # Head with L2 + Dropout
+
     reg = regularizers.l2(weight_decay)
     x = Dense(64, 
               activation='relu', 
-              # kernel_regularizer=reg
+
               )(merged); x = Dropout(0.2)(x)
 
     x = Dense(64, 
               activation='relu', 
-              # kernel_regularizer=reg
+
               )(x);  x = Dropout(0.2)(x); x = BatchNormalization()(x)
     out = Dense(num_classes, activation='softmax', name='output')(x)
 
@@ -575,7 +574,7 @@ callbacks_common = [
     histogram_freq=1,
     write_graph=True,
     write_images=True,
-    update_freq='epoch',   # log once per epoch
+    update_freq='epoch',   
     profile_batch=0 
 ),
 
@@ -642,7 +641,7 @@ for batch in Test_dataset:
     inputs, labels = batch
     preds = best_model.predict(inputs, verbose=0)
     y_true.extend(np.argmax(labels.numpy(), axis=1))
-    y_score.extend(preds[:, 1])  # score for class 1 (Forged)
+    y_score.extend(preds[:, 1])  
 
 y_true = np.array(y_true); y_score = np.array(y_score)
 
@@ -671,7 +670,7 @@ from collections import defaultdict
 video_preds = defaultdict(list)
 video_labels = {}
 for (ctu_path, tu_path, dir_path, otu_path,IF_path, label) in Test_zipped:
-    # Predict for one frame across all four features
+
     inputs = (
         decode_img(ctu_path)[None, ...],
         decode_img(tu_path)[None, ...],
@@ -694,16 +693,16 @@ for (ctu_path, tu_path, dir_path, otu_path,IF_path, label) in Test_zipped:
         # Fallback for unexpected formats
         video_id = fname
 
-    # Store predictions + label
+
     video_preds[video_id].append(pred)
 
-    # Ensure consistent label
+
     if video_id not in video_labels:
         video_labels[video_id] = true_label
     elif video_labels[video_id] != true_label:
         print(f"[Warning] Inconsistent labels for {video_id}!")
 
-# Majority vote per video
+
 correct_videos = 0
 y_true_vid, y_pred_vid = [], []
 for vid, preds in video_preds.items():
@@ -716,7 +715,7 @@ for vid, preds in video_preds.items():
 video_accuracy = correct_videos / len(video_preds)
 print(f"\nVideo-level Accuracy: {video_accuracy:.4f} ({correct_videos}/{len(video_preds)})")
 
-# Print video-level classification report
+
 video_report = classification_report(y_true_vid, y_pred_vid, target_names=["Original", "Forged"])
 print("\nVideo-level Classification Report:\n", video_report)
 
@@ -730,7 +729,7 @@ ax2.plot(history.history['val_loss'], label='validation')
 ax2.set_title('Loss'); ax2.set_xlabel('Epoch'); ax2.legend()
 plt.tight_layout(); plt.savefig(os.path.join(logdir, 'Plots', f'training_curves{date_ver}.png')); plt.close()
 
-# Save weights (pickle)
+
 with open(weights_pkl, 'wb') as f:
     pickle.dump(model.get_weights(), f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -749,7 +748,7 @@ print("INDIVIDUAL VIDEO RESULTS")
 print("="*60)
 
 for (ctu_path, tu_path, dir_path, otu_path, IF_path, label) in Test_zipped:
-    # Predict for one frame
+
     inputs = (
         decode_img(ctu_path)[None, ...],
         decode_img(tu_path)[None, ...],
@@ -761,26 +760,26 @@ for (ctu_path, tu_path, dir_path, otu_path, IF_path, label) in Test_zipped:
     pred = np.argmax(probs, axis=1)[0]
     true_label = label
 
-    # Extract video id from filename
+
     fname = os.path.basename(ctu_path)
     parts = fname.split("_")  
     
-    # Group by video ID (ignore frame number)
+
     if len(parts) >= 3:
-        video_id = f"{parts[0]}_{parts[1]}"   # e.g. OriginalDiff_1 or ForgedDiff_1
+        video_id = f"{parts[0]}_{parts[1]}"  
     else:
         video_id = fname
 
-    # Store predictions + label
+
     video_preds[video_id].append(pred)
 
-    # Ensure consistent label
+
     if video_id not in video_labels:
         video_labels[video_id] = true_label
     elif video_labels[video_id] != true_label:
         print(f"[Warning] Inconsistent labels for {video_id}!")
 
-# Calculate per-video accuracy and print individual results
+
 correct_videos = 0
 per_video_results = []
 
@@ -827,7 +826,7 @@ print("-" * 80)
 print(f"\nOVERALL VIDEO-LEVEL ACCURACY: {video_accuracy:.4f} ({correct_videos}/{len(video_preds)})")
 print("="*60)
 
-# Print detailed summary by video type
+
 original_videos = [r for r in per_video_results if r['true_label'] == 0]
 forged_videos = [r for r in per_video_results if r['true_label'] == 1]
 
@@ -845,7 +844,7 @@ if forged_videos:
     forged_acc = forged_correct / len(forged_videos) * 100
     print(f"FORGED Videos:   {forged_correct}/{len(forged_videos)} correct ({forged_acc:.2f}%)")
 
-# Print videos that were misclassified
+
 misclassified = [r for r in per_video_results if not r['is_correct']]
 if misclassified:
     print("\n" + "="*60)
@@ -856,7 +855,7 @@ if misclassified:
               f"Predicted={r['predicted_label_name']}, "
               f"Frame Acc={r['frame_accuracy']:.1f}% ({r['correct_frames']}/{r['total_frames']} frames)")
 
-# Print best and worst performing videos
+
 print("\n" + "="*60)
 print("BEST & WORST PERFORMING VIDEOS")
 print("="*60)
@@ -907,7 +906,7 @@ os.makedirs(paper_fig_dir, exist_ok=True)
 # ========================================
 fig1, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-# نمودار هیستوگرام توزیع دقت فریم
+
 frame_accs = [r['frame_accuracy'] for r in per_video_results]
 axes[0].hist(frame_accs, bins=15, edgecolor='black', alpha=0.7, color='steelblue')
 axes[0].axvline(np.mean(frame_accs), color='red', linestyle='--', linewidth=2, 
@@ -949,7 +948,7 @@ print("✓ Figure 1 saved: Frame Accuracy Distribution")
 # ========================================
 fig2, ax = plt.subplots(figsize=(12, 8))
 
-# ایجاد ترتیب ویدئوها بر اساس دقت فریم (صعودی)
+
 sorted_results = sorted(per_video_results, key=lambda x: x['frame_accuracy'])
 video_names = [r['video_id'] for r in sorted_results]
 frame_accs_sorted = [r['frame_accuracy'] for r in sorted_results]
@@ -1150,7 +1149,7 @@ for i, video_id in enumerate(video_names_sorted):
 error_matrix = (prediction_matrix != truth_matrix).astype(float)
 error_matrix[error_matrix == 0] = np.nan  # فقط خطاها را نشان بده
 
-# Plot
+
 im = ax.imshow(prediction_matrix, aspect='auto', cmap='RdYlGn_r', 
                interpolation='nearest', vmin=0, vmax=1)
 ax.set_xlabel('Frame Index', fontsize=12)
@@ -1443,7 +1442,7 @@ for idx, (title, (video_id, label)) in enumerate(sample_videos.items()):
             ax.axis('off')
             break
 
-# plot confidence histogram
+
 ax = axes[1, 2]
 all_confidences = []
 for batch in Test_dataset:
